@@ -11,7 +11,13 @@ import asyncio
 import logging
 from urllib.parse import parse_qs
 
-from ..flex import trip_card
+from linebot.v3.messaging import (
+    ConfirmTemplate,
+    TemplateMessage,
+)
+from linebot.v3.messaging.models import PostbackAction
+
+from ..flex import help_carousel, trip_card
 from ..line_client import LineAPI
 from ..services import journal as journal_svc, trip as trip_svc
 from .. import supabase_client as db
@@ -23,15 +29,51 @@ async def handle(ev) -> None:
     data = parse_qs(ev.postback.data or "")
     action = (data.get("action") or [""])[0]
 
+    if action == "close_trip_confirm":
+        await _close_trip_confirm(ev)
+        return
     if action == "close_trip":
         await close_trip_flow(ev.source.user_id, ev.reply_token)
         return
     if action == "regenerate_journal":
         await _regenerate_flow(ev)
         return
+    if action == "show_help":
+        async with LineAPI() as api:
+            await api.reply_flex(ev.reply_token, "說明", help_carousel.build())
+        return
+    if action == "cancel":
+        async with LineAPI() as api:
+            await api.reply_text(ev.reply_token, "好的，繼續記錄吧～ 😊")
+        return
 
     async with LineAPI() as api:
         await api.reply_text(ev.reply_token, f"未支援的 action: {action}")
+
+
+async def _close_trip_confirm(ev) -> None:
+    """Confirm template：避免使用者誤觸結束旅程。"""
+    user_id = ev.source.user_id
+    trip_id = await trip_svc.get_active_trip_id(user_id)
+    async with LineAPI() as api:
+        if not trip_id:
+            await api.reply_text(ev.reply_token, "你目前沒有進行中的旅程喔～")
+            return
+        trip = await db.get_trip(trip_id)
+        title = (trip or {}).get("title") or "這趟旅程"
+        template = ConfirmTemplate(
+            text=f"要結束「{title}」並產生遊記嗎？\n結束後就不能再新增紀錄囉。",
+            actions=[
+                PostbackAction(
+                    label="✅ 結束並產生", data="action=close_trip", display_text="結束旅程"
+                ),
+                PostbackAction(label="❌ 還沒", data="action=cancel", display_text="繼續記錄"),
+            ],
+        )
+        await api.reply(
+            ev.reply_token,
+            [TemplateMessage(alt_text=f"確定結束「{title}」？", template=template)],
+        )
 
 
 async def close_trip_flow(user_id: str, reply_token: str) -> None:

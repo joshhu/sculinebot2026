@@ -13,13 +13,22 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import random
+
 from linebot.v3.messaging import (
     ImageMessage,
     QuickReply,
     QuickReplyItem,
+    StickerMessage,
     TextMessage,
 )
-from linebot.v3.messaging.models import MessageAction, PostbackAction
+from linebot.v3.messaging.models import (
+    CameraAction,
+    CameraRollAction,
+    LocationAction,
+    MessageAction,
+    PostbackAction,
+)
 
 from .. import gemini_client, supabase_client as db
 from ..flex import trip_card
@@ -30,26 +39,50 @@ from ..services import trip as trip_svc
 log = logging.getLogger(__name__)
 
 
+_ICON_BASE = "https://joshhu-sculinebot2026.hf.space/static"
+
+
 def _quick_reply_in_trip() -> QuickReply:
+    """旅程中：相機/相簿/位置/結束/我的旅程，全部 LINE 原生 action。"""
     return QuickReply(
         items=[
+            QuickReplyItem(action=CameraAction(label="📷 拍照")),
+            QuickReplyItem(action=CameraRollAction(label="🖼 相簿")),
+            QuickReplyItem(action=LocationAction(label="📍 打卡")),
             QuickReplyItem(
                 action=PostbackAction(
-                    label="🏁 結束旅程", data="action=close_trip", display_text="結束旅程"
+                    label="🏁 結束", data="action=close_trip_confirm", display_text="結束旅程"
                 )
             ),
-            QuickReplyItem(action=MessageAction(label="📚 我的旅程", text="/我的旅程")),
+            QuickReplyItem(action=MessageAction(label="📚 旅程", text="/我的旅程")),
         ]
     )
 
 
 def _quick_reply_idle() -> QuickReply:
+    """未開始旅程：開始 + 看歷史 + 看說明。"""
     return QuickReply(
         items=[
             QuickReplyItem(action=MessageAction(label="📍 開始旅程", text="/開始 我的旅程")),
             QuickReplyItem(action=MessageAction(label="📚 我的旅程", text="/我的旅程")),
+            QuickReplyItem(
+                action=PostbackAction(
+                    label="💡 怎麼用", data="action=show_help", display_text="看看怎麼用"
+                )
+            ),
         ]
     )
+
+
+# 偶爾用的官方 sticker 池（package_id, sticker_id）
+# 來源：LINE Sticker Definitions https://developers.line.biz/en/docs/messaging-api/sticker-list/
+_STICKERS = [
+    ("446", "1988"),  # Brown 開心
+    ("446", "1990"),  # Cony 害羞
+    ("11537", "52002735"),  # 貓貓開心
+    ("11538", "51626499"),  # 加油
+    ("6362", "11087927"),  # POPO 比讚
+]
 
 
 async def handle(ev) -> None:
@@ -95,7 +128,12 @@ async def _chat(ev, text: str) -> None:
             await entry_svc.add_text(trip_id, f"【Lumi】{reply}", ai_meta={"role": "assistant"})
 
         qr = _quick_reply_in_trip() if trip_id else _quick_reply_idle()
-        await api.reply(ev.reply_token, [TextMessage(text=reply, quick_reply=qr)])
+        msgs: list = [TextMessage(text=reply, quick_reply=qr)]
+        # 1/4 機率附 sticker，營造活潑感
+        if random.random() < 0.25:
+            pkg, sid = random.choice(_STICKERS)
+            msgs.append(StickerMessage(package_id=pkg, sticker_id=sid))
+        await api.reply(ev.reply_token, msgs)
 
 
 # ---- /開始 ----
