@@ -134,6 +134,51 @@ async def reverse_location(lat: float, lng: float) -> dict:
     return await asyncio.to_thread(_do)
 
 
+# ---------- 圖片生成（Nano Banana 2） ----------
+
+async def generate_image(prompt: str) -> bytes | None:
+    """純文字產圖。回傳 image bytes（JPEG/PNG），失敗回 None。"""
+
+    def _do() -> bytes | None:
+        resp = get_client().models.generate_content(
+            model=get_settings().gemini_model_image,
+            contents=[prompt],
+        )
+        for p in resp.candidates[0].content.parts:
+            if getattr(p, "inline_data", None) and p.inline_data.data:
+                return p.inline_data.data
+        return None
+
+    try:
+        return await asyncio.to_thread(_do)
+    except Exception as e:  # noqa: BLE001
+        log.warning("generate_image failed: %s", e)
+        return None
+
+
+async def stylize_image(image_bytes: bytes, prompt: str, mime: str = "image/jpeg") -> bytes | None:
+    """圖生圖：基於使用者照片產出風格化版本。"""
+
+    def _do() -> bytes | None:
+        resp = get_client().models.generate_content(
+            model=get_settings().gemini_model_image,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime),
+                prompt,
+            ],
+        )
+        for p in resp.candidates[0].content.parts:
+            if getattr(p, "inline_data", None) and p.inline_data.data:
+                return p.inline_data.data
+        return None
+
+    try:
+        return await asyncio.to_thread(_do)
+    except Exception as e:  # noqa: BLE001
+        log.warning("stylize_image failed: %s", e)
+        return None
+
+
 # ---------- 對話人格 Lumi ----------
 
 LUMI_PERSONA = """你是「Lumi」，一個活潑可愛的旅伴 AI，會陪使用者一起記錄旅程。

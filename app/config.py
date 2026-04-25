@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # 3.1 沒有「非 lite」的 flash；flash-lite-preview 即為 3.1 flash 本體
     gemini_model_fast: str = "gemini-3.1-flash-lite-preview"
     gemini_model_pro: str = "gemini-3.1-pro-preview"
+    gemini_model_image: str = "gemini-3.1-flash-image-preview"  # Nano Banana 2
 
     supabase_url: str
     supabase_service_role_key: str

@@ -13,7 +13,8 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.messaging.models import MessageAction
 
-from .. import pollinations_client
+from .. import gemini_client
+from .. import supabase_client as db
 from ..line_client import LineAPI
 from ..services import trip as trip_svc
 
@@ -55,14 +56,14 @@ async def handle(ev) -> None:
 
 
 async def _post_welcome_image(user_id: str) -> None:
-    """背景產一張小熊歡迎圖（pollinations 5-15 秒），用 push 補送。"""
-    url = await pollinations_client.generate_and_save(
-        "watercolor illustration, cute kawaii bear holding a camera, cherry blossoms, soft pastel, "
-        "saying hello, square composition",
-        prefix="welcome",
+    """背景產一張小熊歡迎圖（Gemini Nano Banana 2），用 push 補送。"""
+    img = await gemini_client.generate_image(
+        "Watercolor illustration. A cute kawaii bear with a camera waving hello. "
+        "Cherry blossoms. Soft pastel palette. Square composition. No text."
     )
-    if not url:
+    if not img:
         return
+    url = await db.upload_to_bucket("journals", f"welcome/{user_id}.jpg", img, "image/jpeg")
     try:
         async with LineAPI() as api:
             await api.push(user_id, [ImageMessage(original_content_url=url, preview_image_url=url)])

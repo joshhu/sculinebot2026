@@ -21,7 +21,7 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.messaging.models import MessageAction, PostbackAction
 
-from .. import gemini_client, pollinations_client, supabase_client as db
+from .. import gemini_client, supabase_client as db
 from ..flex import trip_card
 from ..line_client import LineAPI, make_flex
 from ..services import entry as entry_svc
@@ -125,14 +125,16 @@ async def _cmd_start(ev, title: str) -> None:
 
 
 async def _post_start_cover(user_id: str, trip_id: str, title: str) -> None:
+    """背景產旅程封面圖（Gemini Nano Banana 2）。"""
     prompt = (
-        f"watercolor illustration of a travel diary cover for a trip named '{title}', "
-        "kawaii style, soft pastel colors, cherry blossoms or scenic elements, square composition"
+        f"Travel diary cover illustration for a trip titled '{title}'. "
+        "Watercolor style, soft pastel colors, kawaii elements, scenic background. "
+        "Square composition. No text."
     )
-    url = await pollinations_client.generate_and_save(prompt, prefix=f"covers/{trip_id}", width=1024, height=1024)
-    if not url:
+    img = await gemini_client.generate_image(prompt)
+    if not img:
         return
-    # 寫進 trip cover 給遊記用
+    url = await db.upload_to_bucket("journals", f"covers/{trip_id}.jpg", img, "image/jpeg")
     try:
         c = db.get_client()
         c.table("trips").update({"cover_photo_url": url}).eq("id", trip_id).execute()
@@ -144,7 +146,7 @@ async def _post_start_cover(user_id: str, trip_id: str, title: str) -> None:
                 user_id,
                 [
                     ImageMessage(original_content_url=url, preview_image_url=url),
-                    TextMessage(text="🎨 隨手畫了張封面～你今天想從哪裡開始？"),
+                    TextMessage(text="🎨 我幫你畫了張封面～你今天想從哪裡開始？"),
                 ],
             )
     except Exception as e:  # noqa: BLE001
