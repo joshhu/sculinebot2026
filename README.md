@@ -1,3 +1,15 @@
+---
+title: sculinebot2026
+emoji: 📔
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+short_description: AI 旅遊日記 LINE Bot — 跨模態歸檔 + Gemini 自動生成遊記
+---
+
 # sculinebot2026 — AI 旅遊日記 LINE Bot
 
 把 LINE 變成隨身的旅伴：旅程中把照片、心情、語音、地點丟給 Bot，背後用 **Google Gemini** 做多模態理解（景點 / 食物 / 心情標籤、語音逐字稿、座標反查），把素材依時序歸檔到 **Supabase**；旅程結束時，Bot 自動把整趟旅程整合成一份**有圖有文有時序**的線上遊記網頁，回傳閱讀連結。
