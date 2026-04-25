@@ -39,6 +39,24 @@ async def upsert_user(line_user_id: str, display_name: str | None, picture_url: 
     await asyncio.to_thread(_do)
 
 
+async def ensure_user_exists(line_user_id: str) -> None:
+    """只插入不覆蓋：避免在已知 follow event 漏掉時，後續 webhook 因 FK 失敗。"""
+
+    def _do() -> None:
+        (
+            get_client()
+            .table("users")
+            .upsert(
+                {"line_user_id": line_user_id},
+                on_conflict="line_user_id",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+
+    await asyncio.to_thread(_do)
+
+
 async def get_user(line_user_id: str) -> dict | None:
     def _do() -> dict | None:
         r = (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -18,6 +19,7 @@ from linebot.v3.webhooks import (
     UnfollowEvent,
 )
 
+from . import supabase_client as db
 from .config import get_settings
 from .handlers import audio as h_audio
 from .handlers import follow as h_follow
@@ -25,7 +27,7 @@ from .handlers import image as h_image
 from .handlers import location as h_location
 from .handlers import postback as h_postback
 from .handlers import text as h_text
-from .line_client import get_parser
+from .line_client import LineAPI, get_parser
 
 log = logging.getLogger("sculinebot")
 logging.basicConfig(
@@ -69,7 +71,27 @@ async def callback(request: Request, x_line_signature: str = Header(default=""))
     return JSONResponse({"ok": True})
 
 
+async def _lazy_fill_profile(user_id: str) -> None:
+    """背景：若使用者沒有 display_name（例如舊好友未觸發 follow），補抓一次。"""
+    try:
+        existing = await db.get_user(user_id)
+        if existing and existing.get("display_name"):
+            return
+        async with LineAPI() as api:
+            p = await api.get_profile(user_id)
+        await db.upsert_user(user_id, p.get("display_name"), p.get("picture_url"))
+    except Exception as e:  # noqa: BLE001
+        log.debug("lazy profile fill skipped: %s", e)
+
+
 async def _dispatch(ev) -> None:
+    # 進來的事件先 ensure user 存在（FK 保護），背景補 profile。
+    src = getattr(ev, "source", None)
+    user_id = getattr(src, "user_id", None) if src else None
+    if user_id:
+        await db.ensure_user_exists(user_id)
+        asyncio.create_task(_lazy_fill_profile(user_id))
+
     if isinstance(ev, FollowEvent):
         await h_follow.handle(ev)
         return
