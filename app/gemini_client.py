@@ -134,6 +134,86 @@ async def reverse_location(lat: float, lng: float) -> dict:
     return await asyncio.to_thread(_do)
 
 
+# ---------- 對話人格 Lumi ----------
+
+LUMI_PERSONA = """你是「Lumi」，一個活潑可愛的旅伴 AI，會陪使用者一起記錄旅程。
+
+# 個性
+- 像朋友一樣，好奇、會主動問問題、給建議
+- 用繁體中文台灣口語，可以加適度表情符號（不要太多）
+- 用「欸」「哇」「我覺得」「好讚」這種口語
+- 有畫面感，不要說官腔
+
+# 規則
+1. 每則回覆 50 字以內，簡短自然
+2. 不要說「已記錄」「已儲存」「資料已成功寫入」這種機器話
+3. 收到照片/語音/位置時，給出像朋友看到一樣的真實反應，並追問或給建議
+4. 如果使用者沒在旅程中，輕輕暗示可以開始一趟，不要硬推
+5. 每次只回一段，不要分點
+6. 不要用 markdown / 列表 / 程式碼框
+7. 可以反問、給延伸建議，例如「附近有 OO 也很值得去」「下一站打算去哪？」
+"""
+
+
+async def chat_reply(user_text: str, recent_entries: list[dict] | None = None, *, in_trip: bool = False) -> str:
+    """以 Lumi 人格回覆。recent_entries 提供最近上下文。"""
+
+    def _do() -> str:
+        ctx_lines: list[str] = []
+        if recent_entries:
+            for e in recent_entries[-6:]:
+                kind = e.get("kind")
+                if kind == "text":
+                    ctx_lines.append(f"使用者說：{e.get('raw_text','')}")
+                elif kind == "photo":
+                    cap = (e.get("ai_meta") or {}).get("caption") or "一張照片"
+                    ctx_lines.append(f"使用者傳了照片：{cap}")
+                elif kind == "audio":
+                    ctx_lines.append(f"使用者語音：{(e.get('raw_text') or '')[:60]}")
+                elif kind == "location":
+                    place = (e.get("ai_meta") or {}).get("place_name") or "某個地點"
+                    ctx_lines.append(f"使用者打卡：{place}")
+
+        ctx = "\n".join(ctx_lines) if ctx_lines else "（這是對話的開頭）"
+        state = "（目前在旅程中）" if in_trip else "（目前沒有進行中的旅程）"
+        prompt = f"# 最近的對話脈絡\n{ctx}\n\n# 狀態\n{state}\n\n# 使用者剛剛說\n{user_text}\n\n請以 Lumi 的口吻回覆。"
+
+        resp = get_client().models.generate_content(
+            model=get_settings().gemini_model_fast,
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                system_instruction=LUMI_PERSONA,
+                thinking_config=_thinking("LOW"),
+            ),
+        )
+        return (resp.text or "").strip() or "嗯嗯～繼續說 😊"
+
+    return await asyncio.to_thread(_do)
+
+
+async def react_to_photo(caption: str, place: str | None, food_items: list[str], in_trip: bool) -> str:
+    """看到照片時的口語反應。"""
+    facts = f"照片內容：{caption}"
+    if place:
+        facts += f"\n推測地點：{place}"
+    if food_items:
+        facts += f"\n食物：{', '.join(food_items)}"
+    return await chat_reply(facts, in_trip=in_trip)
+
+
+async def react_to_voice(transcript: str, in_trip: bool) -> str:
+    """聽到語音時的回應。"""
+    return await chat_reply(f"（這是語音轉文字）{transcript}", in_trip=in_trip)
+
+
+async def react_to_location(place: str, nearby: list[str], in_trip: bool) -> str:
+    """看到打卡位置時的反應。"""
+    msg = f"使用者剛剛打卡到：{place}"
+    if nearby:
+        msg += f"\n附近知名的有：{', '.join(nearby[:3])}"
+    return await chat_reply(msg, in_trip=in_trip)
+
+
 # ---------- 遊記生成 ----------
 
 JOURNAL_SYSTEM = (
