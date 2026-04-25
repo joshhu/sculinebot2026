@@ -21,4 +21,5 @@ node_modules/
 
 # Local artifacts
 richmenu_*.png
+richmenu_*.jpg
 ngrok.log
