@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from linebot.v3.messaging import FlexMessage
-
 from .. import gemini_client, supabase_client as db
 from ..flex import trip_card
-from ..line_client import LineAPI
+from ..line_client import LineAPI, make_flex
 from ..services import entry as entry_svc, trip as trip_svc
 
 log = logging.getLogger(__name__)
@@ -48,9 +46,9 @@ async def handle(ev) -> None:
         await api.reply(
             ev.reply_token,
             [
-                FlexMessage(
-                    alt_text="語音已記錄",
-                    contents=trip_card.entry_confirm(
+                make_flex(
+                    "語音已記錄",
+                    trip_card.entry_confirm(
                         "🎙️", transcript[:60] + ("…" if len(transcript) > 60 else "")
                     ),
                 )

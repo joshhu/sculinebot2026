@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from linebot.v3.messaging import FlexMessage
-
 from .. import gemini_client
 from ..flex import trip_card
-from ..line_client import LineAPI
+from ..line_client import LineAPI, make_flex
 from ..services import entry as entry_svc, trip as trip_svc
 
 log = logging.getLogger(__name__)
@@ -43,10 +41,5 @@ async def handle(ev) -> None:
 
         await api.reply(
             ev.reply_token,
-            [
-                FlexMessage(
-                    alt_text="位置已記錄",
-                    contents=trip_card.entry_confirm("📍", place, extra),
-                )
-            ],
+            [make_flex("位置已記錄", trip_card.entry_confirm("📍", place, extra))],
         )

@@ -5,17 +5,21 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import json as _json
+
 from linebot.v3.messaging import (
     ApiClient,
     AsyncApiClient,
     AsyncMessagingApi,
     AsyncMessagingApiBlob,
     Configuration,
+    FlexContainer,
     FlexMessage,
     Message,
     MessagingApi,
     MessagingApiBlob,
     PushMessageRequest,
+    QuickReply,
     ReplyMessageRequest,
     ShowLoadingAnimationRequest,
     TextMessage,
@@ -33,6 +37,16 @@ def _config() -> Configuration:
 
 def get_parser() -> WebhookParser:
     return WebhookParser(get_settings().line_channel_secret)
+
+
+def make_flex(alt_text: str, contents: dict, quick_reply: QuickReply | None = None) -> FlexMessage:
+    """v3 SDK 的 FlexMessage(contents=dict) 不會自動轉成 FlexContainer，
+    會送出空殼 bubble 被 LINE 400 退回。這個 helper 強制走 FlexContainer.from_json。
+    """
+    container = FlexContainer.from_json(_json.dumps(contents))
+    if quick_reply is not None:
+        return FlexMessage(alt_text=alt_text, contents=container, quick_reply=quick_reply)
+    return FlexMessage(alt_text=alt_text, contents=container)
 
 
 # --- Sync helpers (used in sync handlers / scripts) ---
@@ -72,7 +86,7 @@ class LineAPI:
         await self.reply(reply_token, [TextMessage(text=text)])
 
     async def reply_flex(self, reply_token: str, alt: str, contents: dict) -> None:
-        await self.reply(reply_token, [FlexMessage(alt_text=alt, contents=contents)])
+        await self.reply(reply_token, [make_flex(alt, contents)])
 
     async def push(self, to: str, messages: list[Message]) -> None:
         await self.api.push_message(PushMessageRequest(to=to, messages=messages))
@@ -81,7 +95,7 @@ class LineAPI:
         await self.push(to, [TextMessage(text=text)])
 
     async def push_flex(self, to: str, alt: str, contents: dict) -> None:
-        await self.push(to, [FlexMessage(alt_text=alt, contents=contents)])
+        await self.push(to, [make_flex(alt, contents)])
 
     async def show_loading(self, chat_id: str, seconds: int = 20) -> None:
         try:

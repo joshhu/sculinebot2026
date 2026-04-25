@@ -12,15 +12,13 @@ from __future__ import annotations
 import logging
 
 from linebot.v3.messaging import (
-    FlexMessage,
     QuickReply,
     QuickReplyItem,
-    TextMessage,
 )
 from linebot.v3.messaging.models import MessageAction, PostbackAction
 
 from ..flex import trip_card
-from ..line_client import LineAPI
+from ..line_client import LineAPI, make_flex
 from ..services import entry as entry_svc
 from ..services import trip as trip_svc
 
@@ -74,9 +72,9 @@ async def handle(ev) -> None:
         await api.reply(
             ev.reply_token,
             [
-                FlexMessage(
-                    alt_text="已記錄",
-                    contents=trip_card.entry_confirm("📝", text[:40] + ("…" if len(text) > 40 else "")),
+                make_flex(
+                    "已記錄",
+                    trip_card.entry_confirm("📝", text[:40] + ("…" if len(text) > 40 else "")),
                     quick_reply=_quick_reply_in_trip(),
                 )
             ],
@@ -91,9 +89,9 @@ async def _cmd_start(ev, title: str) -> None:
         await api.reply(
             ev.reply_token,
             [
-                FlexMessage(
-                    alt_text=f"旅程 {title} 已開始",
-                    contents=trip_card.trip_started(title),
+                make_flex(
+                    f"旅程 {title} 已開始",
+                    trip_card.trip_started(title),
                     quick_reply=_quick_reply_in_trip(),
                 )
             ],
